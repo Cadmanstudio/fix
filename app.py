@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 
 # ✅ Load environment variables from .env file
-load_dotenv(dotenv_path=".env")  # Ensure it loads from the correct location
+load_dotenv()  # ✅ Works locally but is ignored on Render
 
 app = Flask(__name__)
 
