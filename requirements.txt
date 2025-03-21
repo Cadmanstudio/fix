@@ -2,3 +2,4 @@ flask
 python-telegram-bot
 gunicorn
 python-dotenv 
+requests
