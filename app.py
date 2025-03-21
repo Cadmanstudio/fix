@@ -12,7 +12,6 @@ app = Flask(__name__)
 # ✅ Read environment variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
-FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY")  # Flutterwave Secret Key
 
 # ✅ Telegram Group Link
 GROUP_LINK = "https://t.me/+t7kOR8hKRr0yZGE0"  # Replace with your actual Telegram group link
@@ -22,24 +21,18 @@ if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN is missing! Set it in Render's environment variables.")
 if not ADMIN_CHAT_ID:
     raise ValueError("❌ ADMIN_CHAT_ID is missing! Set it in Render's environment variables.")
-if not FLW_SECRET_KEY:
-    raise ValueError("❌ FLW_SECRET_KEY is missing! Set it in Render's environment variables.")
 
 # ✅ Initialize Telegram bot
 bot = telegram.Bot(token=BOT_TOKEN)
 
 @app.route('/flutterwave-webhook', methods=['POST'])
 def flutterwave_webhook():
-    """Handles Flutterwave webhook and verifies the request with the Secret Key."""
+    """Handles Flutterwave webhook and verifies the request."""
     
-    # ✅ Get Flutterwave hash from headers
-    signature = request.headers.get("verif-hash")
+    # ✅ Debug: Print received webhook data
+    print("🔹 Received Webhook Data:", request.json)
 
-    # ✅ Verify the signature (Just match it, no need for HMAC)
-    if not signature or signature != FLW_SECRET_KEY:
-        return jsonify({"status": "error", "message": "Invalid Webhook Signature"}), 403
-
-    # ✅ Process the webhook if the signature is valid
+    # ✅ Process the webhook
     data = request.json
 
     if data and data.get("status") == "successful":
@@ -51,6 +44,7 @@ def flutterwave_webhook():
             send_order_to_group(user_id, order_details)
             return jsonify({"status": "success", "message": "Order sent"}), 200
         else:
+            print("❌ No telegram_user_id found in metadata!")
             return jsonify({"status": "error", "message": "No Telegram User ID"}), 400
 
     return jsonify({"status": "error", "message": "Payment not successful"}), 400
@@ -65,11 +59,6 @@ def send_order_to_group(user_id, order_details):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     bot.send_message(chat_id=ADMIN_CHAT_ID, text=message, reply_markup=reply_markup, parse_mode="Markdown")
-
-@app.route('/get-group-link', methods=['GET'])
-def get_group_link():
-    """Returns the Telegram group link when requested."""
-    return jsonify({"group_link": GROUP_LINK})
 
 @app.route('/telegram-webhook', methods=['POST'])
 def telegram_webhook():
