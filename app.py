@@ -1,10 +1,9 @@
 from flask import Flask, request, jsonify
 import telegram
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 import os
-import requests
-import hashlib
 import hmac
+import hashlib
 from dotenv import load_dotenv
 
 # ✅ Load environment variables
@@ -38,7 +37,7 @@ def flutterwave_webhook():
     # ✅ Get the Flutterwave signature from headers
     signature = request.headers.get("verif-hash")
 
-    # ✅ Compute HMAC SHA256 hash from the request body
+    # ✅ Compute HMAC SHA256 hash from the request body using FLW_SECRET_KEY
     computed_signature = hmac.new(
         FLW_SECRET_KEY.encode(),  # Use your secret key
         request.data,  # Use the raw request body
@@ -53,11 +52,14 @@ def flutterwave_webhook():
     data = request.json
     
     if data and data.get("status") == "successful":
-        user_id = data["customer"].get("phonenumber", "Unknown User")
+        user_id = data.get("meta", {}).get("telegram_user_id")  # Ensure Telegram user ID is passed in metadata
         order_details = data.get("meta", {}).get("order_details", "No details provided")
-        
-        send_order_to_group(user_id, order_details)
-    
+
+        if user_id:
+            send_order_to_group(user_id, order_details)
+        else:
+            print("❌ No telegram_user_id found in metadata!")
+
     return jsonify({"status": "success"}), 200
 
 def send_order_to_group(user_id, order_details):
@@ -65,9 +67,9 @@ def send_order_to_group(user_id, order_details):
     message = f"📦 *New Order Received!*\n\n{order_details}\n\n" \
               f"🚀 *Join our delivery group for updates:* [Click Here]({GROUP_LINK})\n\n" \
               f"Click below to confirm:"
-    
-    keyboard = [[telegram.InlineKeyboardButton("Confirm Order ✅", callback_data=f"confirm_{user_id}")]]
-    reply_markup = telegram.InlineKeyboardMarkup(keyboard)
+
+    keyboard = [[InlineKeyboardButton("Confirm Order ✅", callback_data=f"confirm_{user_id}")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     bot.send_message(chat_id=ADMIN_CHAT_ID, text=message, reply_markup=reply_markup, parse_mode="Markdown")
 
