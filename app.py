@@ -9,20 +9,29 @@ load_dotenv()
 # ✅ Read environment variables with default values
 BOT_TOKEN = os.getenv("BOT_TOKEN", "your_default_bot_token")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "your_default_chat_id")
+FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY", "your_default_secret_key")
 
 # ✅ Telegram Group Link
 GROUP_LINK = "https://t.me/+t7kOR8hKRr0yZGE0"  # Replace with your actual Telegram group link
 
 # ✅ Validate environment variables
 if BOT_TOKEN == "your_default_bot_token":
-    raise ValueError("❌ BOT_TOKEN is missing! Set it in Render's environment variables.")
+    raise ValueError("❌ BOT_TOKEN is missing! Set it in Railway environment variables.")
 if ADMIN_CHAT_ID == "your_default_chat_id":
-    raise ValueError("❌ ADMIN_CHAT_ID is missing! Set it in Render's environment variables.")
+    raise ValueError("❌ ADMIN_CHAT_ID is missing! Set it in Railway environment variables.")
+if FLW_SECRET_KEY == "your_default_secret_key":
+    raise ValueError("❌ FLW_SECRET_KEY is missing! Set it in Railway environment variables.")
 
 # ✅ Base Telegram API URL
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
+# ✅ Initialize Flask app
 app = Flask(__name__)
+
+# ✅ Home route to verify deployment
+@app.route('/')
+def home():
+    return "✅ Webhook is running successfully!"
 
 def send_telegram_message(chat_id, text, reply_markup=None):
     """Sends a message to Telegram with optional inline keyboard."""
@@ -35,14 +44,20 @@ def send_telegram_message(chat_id, text, reply_markup=None):
 
 @app.route('/flutterwave-webhook', methods=['POST'])
 def flutterwave_webhook():
-    """Handles Flutterwave webhook and verifies the request."""
-    
+    """Handles Flutterwave webhook and verifies the request signature."""
+
     # ✅ Validate request data
     data = request.get_json()
     if not data:
         return jsonify({"status": "error", "message": "Invalid request"}), 400
 
     print("🔹 Received Webhook Data:", data)  # Debugging
+
+    # ✅ Verify Flutterwave signature (for security)
+    request_signature = request.headers.get("verif-hash")
+    if not request_signature or request_signature != FLW_SECRET_KEY:
+        print("❌ Invalid Flutterwave webhook signature!")
+        return jsonify({"status": "error", "message": "Unauthorized"}), 403
 
     # ✅ Process successful payment
     if data.get("status") == "successful":
