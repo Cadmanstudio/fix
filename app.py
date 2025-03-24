@@ -1,41 +1,51 @@
 from flask import Flask, request, jsonify
-import telegram
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+import requests
 import os
 from dotenv import load_dotenv
 
 # ✅ Load environment variables
 load_dotenv()
 
-app = Flask(__name__)
-
-# ✅ Read environment variables
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
+# ✅ Read environment variables with default values
+BOT_TOKEN = os.getenv("BOT_TOKEN", "your_default_bot_token")
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "your_default_chat_id")
 
 # ✅ Telegram Group Link
 GROUP_LINK = "https://t.me/+t7kOR8hKRr0yZGE0"  # Replace with your actual Telegram group link
 
 # ✅ Validate environment variables
-if not BOT_TOKEN:
+if BOT_TOKEN == "your_default_bot_token":
     raise ValueError("❌ BOT_TOKEN is missing! Set it in Render's environment variables.")
-if not ADMIN_CHAT_ID:
+if ADMIN_CHAT_ID == "your_default_chat_id":
     raise ValueError("❌ ADMIN_CHAT_ID is missing! Set it in Render's environment variables.")
 
-# ✅ Initialize Telegram bot
-bot = telegram.Bot(token=BOT_TOKEN)
+# ✅ Base Telegram API URL
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+app = Flask(__name__)
+
+def send_telegram_message(chat_id, text, reply_markup=None):
+    """Sends a message to Telegram with optional inline keyboard."""
+    data = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
+    if reply_markup:
+        data["reply_markup"] = reply_markup
+
+    response = requests.post(TELEGRAM_API_URL, json=data)
+    return response.json()
 
 @app.route('/flutterwave-webhook', methods=['POST'])
 def flutterwave_webhook():
     """Handles Flutterwave webhook and verifies the request."""
     
-    # ✅ Debug: Print received webhook data
-    print("🔹 Received Webhook Data:", request.json)
+    # ✅ Validate request data
+    data = request.get_json()
+    if not data:
+        return jsonify({"status": "error", "message": "Invalid request"}), 400
 
-    # ✅ Process the webhook
-    data = request.json
+    print("🔹 Received Webhook Data:", data)  # Debugging
 
-    if data and data.get("status") == "successful":
+    # ✅ Process successful payment
+    if data.get("status") == "successful":
         meta = data.get("meta", {})
         user_id = meta.get("telegram_user_id")  # Ensure Telegram user ID is passed in metadata
         order_details = meta.get("order_details", "No details provided")
@@ -50,50 +60,56 @@ def flutterwave_webhook():
     return jsonify({"status": "error", "message": "Payment not successful"}), 400
 
 def send_order_to_group(user_id, order_details):
-    """Sends order details to the admin group and includes the group link."""
+    """Sends order details to the admin group with a confirmation button."""
     message = f"📦 *New Order Received!*\n\n{order_details}\n\n" \
-              f"🚀 *Join our delivery group for updates:* [Click Here]({GROUP_LINK})\n\n" \
+              f"🚀 *Join our delivery group:* [Click Here]({GROUP_LINK})\n\n" \
               f"Click below to confirm:"
 
-    keyboard = [[InlineKeyboardButton("Confirm Order ✅", callback_data=f"confirm_{user_id}")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    keyboard = {
+        "inline_keyboard": [[{"text": "Confirm Order ✅", "callback_data": f"confirm_{user_id}"}]]
+    }
 
-    bot.send_message(chat_id=ADMIN_CHAT_ID, text=message, reply_markup=reply_markup, parse_mode="Markdown")
+    send_telegram_message(ADMIN_CHAT_ID, message, reply_markup=keyboard)
 
 @app.route('/telegram-webhook', methods=['POST'])
 def telegram_webhook():
     """Handles Telegram button clicks for confirming orders."""
-    update = Update.de_json(request.get_json(), bot)
+    json_data = request.get_json()
+    
+    # ✅ Validate request data
+    if not json_data:
+        return jsonify({"status": "error", "message": "No JSON data received"}), 400
 
-    if update.callback_query:
-        query = update.callback_query
-        admin_id = query.from_user.id  # Get the admin's Telegram user ID
-        admin_username = query.from_user.username  # Get the admin's username (if available)
+    if "callback_query" in json_data:
+        query = json_data["callback_query"]
+        admin_id = query["from"]["id"]
+        admin_username = query["from"].get("username", "")
 
         # ✅ Ensure correct format before splitting
-        if not query.data.startswith("confirm_"):
+        callback_data = query.get("data", "")
+        if not callback_data.startswith("confirm_"):
             return jsonify({"status": "error", "message": "Invalid callback data"}), 400
 
         try:
-            user_id = query.data.split("_")[1]  # Extract user ID from callback_data
+            user_id = callback_data.split("_")[1]  # Extract user ID from callback_data
         except IndexError:
             return jsonify({"status": "error", "message": "Malformed callback data"}), 400
 
-        # ✅ Use username if available, else use the Telegram ID
+        # ✅ Use username if available, else use Telegram ID
         admin_identifier = f"@{admin_username}" if admin_username else f"User ID: {admin_id}"
 
         # ✅ Notify the customer
         confirmation_message = f"✅ Your order has been confirmed by {admin_identifier}.\n\n" \
                                f"Thank you for shopping with us!"
-        bot.send_message(chat_id=user_id, text=confirmation_message)
+        send_telegram_message(user_id, confirmation_message)
 
         # ✅ Notify the admin group that the order has been confirmed
-        bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"🚀 Order for {user_id} has been confirmed by {admin_identifier}.")
+        send_telegram_message(ADMIN_CHAT_ID, f"🚀 Order for {user_id} has been confirmed by {admin_identifier}.")
 
         # ✅ Acknowledge the button click
-        query.answer("✅ Order confirmed successfully!")
+        return jsonify({"status": "success", "message": "Order confirmed"}), 200
 
-    return jsonify({"status": "success"}), 200
+    return jsonify({"status": "error", "message": "Invalid request"}), 400
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
