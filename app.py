@@ -123,4 +123,7 @@ def telegram_webhook():
     return jsonify({"status": "error", "message": "Invalid request"}), 400
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    import os
+    port = int(os.environ.get("PORT", 8080))  # Use Railway's default port
+    app.run(host="0.0.0.0", port=port)
+
