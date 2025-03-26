@@ -45,14 +45,17 @@ def flutterwave_webhook():
     # ✅ Validate request data
     data = request.get_json()
     if not data:
+        print("❌ Invalid webhook request (No JSON received)")
         return jsonify({"status": "error", "message": "Invalid request"}), 400
 
     print("🔹 Received Webhook Data:", data)  # Debugging
 
     # ✅ Verify Flutterwave signature (for security)
     request_signature = request.headers.get("verif-hash")
+    print("🔹 Received Signature:", request_signature)  # Debugging
+
     if not request_signature or request_signature != FLW_SECRET_KEY:
-        print("❌ Invalid Flutterwave webhook signature!")
+        print("❌ Invalid Flutterwave signature!")
         return jsonify({"status": "error", "message": "Unauthorized"}), 403
 
     # ✅ Process successful payment
@@ -63,11 +66,13 @@ def flutterwave_webhook():
 
         if user_id:
             send_order_to_group(user_id, order_details)
+            print(f"✅ Order sent to group for user {user_id}")  # Debugging
             return jsonify({"status": "success", "message": "Order sent"}), 200
         else:
             print("❌ No telegram_user_id found in metadata!")
             return jsonify({"status": "error", "message": "No Telegram User ID"}), 400
 
+    print("❌ Payment was not successful")
     return jsonify({"status": "error", "message": "Payment not successful"}), 400
 
 def send_order_to_group(user_id, order_details):
@@ -126,4 +131,3 @@ if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 8080))  # Use Railway's default port
     app.run(host="0.0.0.0", port=port)
-
