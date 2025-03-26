@@ -1,25 +1,21 @@
 from flask import Flask, request, jsonify
 import requests
 import os
-from dotenv import load_dotenv
 
-# ✅ Load environment variables
-load_dotenv()
+# ✅ Read environment variables (Set in Railway)
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "").strip()
+FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY", "").strip()
 
-# ✅ Read environment variables with default values
-BOT_TOKEN = os.getenv("BOT_TOKEN", "your_default_bot_token")
-ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "your_default_chat_id")
-FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY", "your_default_secret_key")
-
-# ✅ Telegram Group Link
-GROUP_LINK = "https://t.me/+t7kOR8hKRr0yZGE0"  # Replace with your actual Telegram group link
+# ✅ Telegram Group Link (Updated)
+GROUP_LINK = "https://t.me/+t7kOR8hKRr0yZGE0"  # Your actual Telegram group link
 
 # ✅ Validate environment variables
-if BOT_TOKEN == "your_default_bot_token":
+if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN is missing! Set it in Railway environment variables.")
-if ADMIN_CHAT_ID == "your_default_chat_id":
+if not ADMIN_CHAT_ID:
     raise ValueError("❌ ADMIN_CHAT_ID is missing! Set it in Railway environment variables.")
-if FLW_SECRET_KEY == "your_default_secret_key":
+if not FLW_SECRET_KEY:
     raise ValueError("❌ FLW_SECRET_KEY is missing! Set it in Railway environment variables.")
 
 # ✅ Base Telegram API URL
