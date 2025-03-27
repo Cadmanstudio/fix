@@ -5,7 +5,6 @@ import os
 # ✅ Read environment variables (Set in Railway)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "").strip()
-FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY", "").strip()
 
 # ✅ Telegram Group Link (Updated)
 GROUP_LINK = "https://t.me/+t7kOR8hKRr0yZGE0"  # Your actual Telegram group link
@@ -15,8 +14,6 @@ if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN is missing! Set it in Railway environment variables.")
 if not ADMIN_CHAT_ID:
     raise ValueError("❌ ADMIN_CHAT_ID is missing! Set it in Railway environment variables.")
-if not FLW_SECRET_KEY:
-    raise ValueError("❌ FLW_SECRET_KEY is missing! Set it in Railway environment variables.")
 
 # ✅ Base Telegram API URL
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -40,7 +37,7 @@ def send_telegram_message(chat_id, text, reply_markup=None):
 
 @app.route('/flutterwave-webhook', methods=['POST'])
 def flutterwave_webhook():
-    """Handles Flutterwave webhook and verifies the request signature."""
+    """Handles Flutterwave webhook and processes successful payments."""
 
     # ✅ Validate request data
     data = request.get_json()
@@ -50,26 +47,20 @@ def flutterwave_webhook():
 
     print("🔹 Received Webhook Data:", data)  # Debugging
 
-    # ✅ Verify Flutterwave signature (for security)
-    request_signature = request.headers.get("verif-hash")
-    print("🔹 Received Signature:", request_signature)  # Debugging
-
-    if not request_signature or request_signature != FLW_SECRET_KEY:
-        print("❌ Invalid Flutterwave signature!")
-        return jsonify({"status": "error", "message": "Unauthorized"}), 403
-
     # ✅ Process successful payment
-    if data.get("status") == "successful":
-        meta = data.get("meta", {})
-        user_id = meta.get("telegram_user_id")  # Ensure Telegram user ID is passed in metadata
-        order_details = meta.get("order_details", "No details provided")
+    if data.get("event") == "charge.completed" and data["data"].get("status") == "successful":
+        tx_ref = data["data"].get("tx_ref", "")
+        user_id = tx_ref.split("_")[1] if "_" in tx_ref else None  # Extract user ID from tx_ref
+        order_details = f"💰 Amount: {data['data']['amount']} {data['data']['currency']}\n" \
+                        f"💳 Payment Type: {data['data']['payment_type']}\n" \
+                        f"🔗 Transaction Reference: {data['data']['flw_ref']}"
 
         if user_id:
             send_order_to_group(user_id, order_details)
             print(f"✅ Order sent to group for user {user_id}")  # Debugging
             return jsonify({"status": "success", "message": "Order sent"}), 200
         else:
-            print("❌ No telegram_user_id found in metadata!")
+            print("❌ No telegram_user_id found in tx_ref!")
             return jsonify({"status": "error", "message": "No Telegram User ID"}), 400
 
     print("❌ Payment was not successful")
@@ -82,7 +73,7 @@ def send_order_to_group(user_id, order_details):
               f"Click below to confirm:"
 
     keyboard = {
-        "inline_keyboard": [[{"text": "Confirm Order ✅", "callback_data": f"confirm_{user_id}"}]]
+        "inline_keyboard": [[{"text": "✅ Confirm Order", "callback_data": f"confirm_{user_id}"}]]
     }
 
     send_telegram_message(ADMIN_CHAT_ID, message, reply_markup=keyboard)
@@ -128,6 +119,5 @@ def telegram_webhook():
     return jsonify({"status": "error", "message": "Invalid request"}), 400
 
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 8080))  # Use Railway's default port
     app.run(host="0.0.0.0", port=port)
