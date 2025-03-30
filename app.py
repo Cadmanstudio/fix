@@ -36,6 +36,24 @@ def send_telegram_message(chat_id, text, reply_markup=None):
     print("📨 Telegram Response:", response.json())  # Debugging
     return response.json()
 
+def send_order_to_group(user_id, order_details, ordered_items):
+    """Sends order details to the Telegram group with a confirmation button."""
+
+    items_text = "\n".join([f" - {item}" for item in ordered_items]) if ordered_items else "No items listed."
+
+    message = (
+        f"{order_details}\n"
+        f"🛍 *Ordered Items:*\n{items_text}\n\n"
+        f"👤 *Customer ID:* {user_id}\n"
+        f"Click below to confirm:"
+    )
+
+    keyboard = {
+        "inline_keyboard": [[{"text": "✅ Confirm Order", "callback_data": f"confirm_{user_id}"}]]
+    }
+
+    send_telegram_message(GROUP_ID, message, reply_markup=keyboard)
+
 @app.route('/flutterwave-webhook', methods=['POST'])
 def flutterwave_webhook():
     """Handles Flutterwave webhook and processes successful payments."""
@@ -54,25 +72,25 @@ def flutterwave_webhook():
         tx_ref = data["data"].get("tx_ref", "")
         user_id = tx_ref.split("_")[1] if "_" in tx_ref else None
 
-        order_details = (
-            f"📦 *New Order Received!*\n\n"
-            f"👤 *Customer ID:* {user_id}\n"
-            f"💰 Amount: {data['data']['amount']} {data['data']['currency']}\n"
-            f"💳 Payment Type: {data['data']['payment_type']}\n"
-            f"🔗 Transaction Reference: {data['data']['flw_ref']}\n\n"
-            f"🛒 *Ordered Items:*\n"
-        )
-
         ordered_items = data["data"].get("meta", {}).get("ordered_items", [])
-        if ordered_items:
-            order_details += "\n".join([f" - {item}" for item in ordered_items]) + "\n\n"
-
-        order_details += "Click below to confirm:"
-
-        print(f"✅ Extracted User ID: {user_id}")  # Debugging
 
         if user_id:
-            send_order_to_group(user_id, order_details)
+            confirmation_text = (
+                "✅ *Payment Confirmed!*\n\n"
+                "Thank you for your order. Your payment has been successfully processed. "
+                "Your order is now being reviewed, and we will notify you when it is confirmed."
+            )
+            send_telegram_message(user_id, confirmation_text)
+
+            order_details = (
+                f"📦 *New Order Received!*\n\n"
+                f"👤 *Customer ID:* {user_id}\n"
+                f"💰 Amount: {data['data']['amount']} {data['data']['currency']}\n"
+                f"💳 Payment Type: {data['data']['payment_type']}\n"
+                f"🔗 Transaction Reference: {data['data']['flw_ref']}\n\n"
+            )
+
+            send_order_to_group(user_id, order_details, ordered_items)
             print(f"✅ Order sent to group for user {user_id}")  # Debugging
             return jsonify({"status": "success", "message": "Order sent"}), 200
         else:
@@ -81,16 +99,6 @@ def flutterwave_webhook():
 
     print("❌ Payment was not successful")
     return jsonify({"status": "error", "message": "Payment not successful"}), 400
-
-def send_order_to_group(user_id, order_details):
-    """Sends order details to the Telegram group with a confirmation button."""
-    message = f"{order_details}\n\n👤 *Customer ID:* {user_id}"
-
-    keyboard = {
-        "inline_keyboard": [[{"text": "✅ Confirm Order", "callback_data": f"confirm_{user_id}"}]]
-    }
-
-    send_telegram_message(GROUP_ID, message, reply_markup=keyboard)
 
 @app.route('/telegram-webhook', methods=['POST'])
 def telegram_webhook():
@@ -117,13 +125,15 @@ def telegram_webhook():
 
         admin_identifier = f"@{admin_username}" if admin_username else f"User ID: {admin_id}"
 
+        # ✅ Confirmation message to the customer
         confirmation_message = (
-            f"✅ Your order has been confirmed by {admin_identifier}.\n\n"
-            f"Thank you for shopping with us! 🎉\n\n"
-            f"📍 Please reply with your delivery address."
+            f"✅ *Your order has been confirmed!*\n\n"
+            f"Your order has been confirmed by {admin_identifier}.\n\n"
+            f"📌 *Please provide your hostel name and room number for delivery.*"
         )
         send_telegram_message(user_id, confirmation_message)
 
+        # ✅ Notify the group that order was confirmed
         send_telegram_message(GROUP_ID, f"🚀 Order for {user_id} has been confirmed by {admin_identifier}.")
 
         return jsonify({"status": "success", "message": "Order confirmed"}), 200
