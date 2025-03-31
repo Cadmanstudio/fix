@@ -62,8 +62,7 @@ def flutterwave_webhook():
         items_text = "\n".join([f" - {item}" for item in ordered_items]) if ordered_items else "No items specified."
 
         order_details = (
-            f"📦 *New Order Received!*
-\n"
+            f"📦 *New Order Received!*\n\n"
             f"👤 *Customer ID:* {user_id}\n"
             f"🏠 Hostel: {hostel_name}\n"
             f"🚪 Room Number: {room_number}\n"
